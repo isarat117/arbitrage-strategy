@@ -1,8 +1,3 @@
-
-
-
-
-
 const axios = require('axios')
 const postgres = require('./config/db')
 
@@ -121,6 +116,21 @@ const dataEkle =async()=>{
         client.end
     })
 
+    //withdraw ve deposit için önceki insert işlemlerini siler
+    client.query(`DELETE FROM depositandwithdraw WHERE true`,(err,res)=>{
+        if(err){
+            console.log(err)
+        }else{
+           // console.log("silindi")
+        }
+        client.end
+    })
+    await setDepositAndWithdraw("kucoin")
+    await setDepositAndWithdraw("gate")
+    await setDepositAndWithdraw("bitmart")
+    await setDepositAndWithdraw("mexc")
+    
+
 
     const kucoin =await getKucoinPrices()
     
@@ -237,76 +247,96 @@ const dataEkle =async()=>{
    
 }
 // deposit ve withdraw için kontrol fonksiyonu
- const isAviableForDeposit =async(coin,borsa)=>{
-    const values =[]
+ const setDepositAndWithdraw =async(borsa)=>{
+    
+   
     //done
     if(borsa==="kucoin"){
+        
         const response  = await axios.get(`https://api.kucoin.com/api/v1/currencies`)
         data = response.data.data
-       
         for(var i= 0; i<data.length;i++){
-            if(coin===data[i].currency){
-                values.push({
-                    withdraw: data[i].isWithdrawEnabled,
-                    deposit: data[i].isDepositEnabled,
-                })
-            }
+            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('kucoin', '${data[i].currency}', ${data[i].isDepositEnabled}, ${data[i].isWithdrawEnabled});`,(err,res)=>{
+                if(err){
+                    console.log(err)
+                }else{
+                   // console.log("basarılı")
+                }
+                client.end
+            })
+           
         }
-        return values
     }
     //done
-    try {
+   
     if(borsa==="bitmart"){
         const response  = await axios.get(`https://api-cloud.bitmart.com/account/v1/currencies`)
         data = response.data.data.currencies
-    
         for(var i= 0; i<data.length;i++){
-            if(coin===data[i].currency){
-                values.push({
-                    withdraw: data[i].withdraw_enabled,
-                    deposit: data[i]. deposit_enabled,
-                })
-            }
+            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('bitmart', '${data[i].currency}', ${data[i]. deposit_enabled}, ${data[i].withdraw_enabled});`,(err,res)=>{
+                if(err){
+                    console.log(err)
+                }else{
+                   // console.log("basarılı")
+                }
+                client.end
+            })
+           
         }
-        return values
     }
-} catch (error) {     
-}
+
     if(borsa==="mexc"){
-        const response  = await axios.get(`https://www.mexc.com/open/api/v2/market/coin/list?currency=${coin}`)
-        data = response.data.data[0].coins
-        withdraw=false
-        deposit=false
+        const response  = await axios.get(`https://www.mexc.com/open/api/v2/market/coin/list?currency`)
+        data0 = response.data.data
+       
 
-        for(var i= 0; i<data.length;i++){
-            if(data[i].is_withdraw_enabled && !values.withdraw){
-               withdraw=true
+        for(var i= 0; i<data0.length;i++){
+            withdraw=false
+            deposit=false
+            
+
+
+            coinName = data0[i].currency
+            data1 = response.data.data[i].coins
+            for(var j =0; j<data1.length;j++){
+                if(data1[j].is_withdraw_enabled && !withdraw){
+                    withdraw=true
+                 }
+     
+                 if(data1[j].is_deposit_enabled && !deposit){
+                     deposit=true
+                 }  
+
             }
-
-            if(data[i].is_deposit_enabled && !values.deposit){
-                deposit=true
-            }   
+           
+            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('mexc', '${coinName}', ${deposit}, ${withdraw});`,(err,res)=>{
+                if(err){
+                    console.log(err)
+                }else{
+                   // console.log("basarılı")
+                }
+                client.end
+            })
         }
 
-        values.push({
-            withdraw:withdraw,
-            deposit:  deposit,
-        })
-        //console.log(values)
-        return values
+      
     }
     //done
     if(borsa==="gate"){
-        const response  = await axios.get(`https://api.gateio.ws/api/v4/spot/currencies/${coin}`)
+        const response  = await axios.get(`https://api.gateio.ws/api/v4/spot/currencies/`)
         data = response.data
+        for(var i=0; i<data.length; i++){
+            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('gate', '${data[i].currency}', ${!data[i].deposit_disabled}, ${!data[i].withdraw_disabled});`,(err,res)=>{
+                if(err){
+                    console.log(err)
+                }else{
+                   // console.log("basarılı")
+                }
+                client.end
+            })
+
+        }
      
-      if(coin===data.currency){
-        values.push({
-            withdraw: !data.withdraw_disabled,
-            deposit:  !data.deposit_disabled,
-        })
-        return values
-    }
     }
     
  }
@@ -402,50 +432,40 @@ const dataEkle =async()=>{
      
 }
 
-const getWithdrawPrice =async(coin,borsa)=>{
 
-    if(borsa==="mexc"){
-        const response = await axios.get(`https://www.mexc.com/open/api/v2/market/coin/list?currency=${coin}`)
-
-      
-         return response.data.data[0].coins[0].fee
-    }
-
-    if(borsa==="kucoin"){
-        const response  = await axios.get(`https://api.kucoin.com/api/v1/currencies`)
-        data = response.data.data
-       
-        for(var i= 0; i<data.length;i++){
-            if(coin===data[i].currency){
-                return data[i].withdrawalMinFee
-            }
-        }
-        
-    }
-    else{
-        return 0
-    }
-
+//dataEkle()
+const isAviableForDeposit =async(coin,borsa)=>{
+   
+    client.query(`select * from depositandwithdraw where borsa_name='${borsa}' and coin_name='${coin}'`,(err,res)=>{
+        if(err){
+            console.log(err)
+        }else{
     
+        const result =[]
+         const response = res.rows
+         result.push({
+            deposit:response[0].deposit,
+            withdraw:response[0].withdraw,
+    
+         })
+         return result
+    
+        }
+        client.end
+    })
+    
+
 }
-
-//getWithdrawPrice("USDT","kucoin")
-
-dataEkle()
-
 
 
 
 
 /*
-
-
 kucoin:0
 bitmart:1
 mexc :2 
 binance:3
 gate:4
-
 */
 
 
