@@ -202,16 +202,20 @@ const dataEkle =async()=>{
           values.push(res.rows)
             
           // düşük fiyatlı yerde deposit ve yüksek fiyatlı yerde withdraw aktif mi kontrolü
+          
+          
           for(var i =0; i<values[0].length;i++)
           {
+            
             try {
             
-          const situationWithdraw = await isAviableForDeposit(values[0][i].name,values[0][i].minborsa)
-          const situationDeposit = await  isAviableForDeposit(values[0][i].name,values[0][i].maxborsa)
+           const situationWithdraw = await isAviableForDeposit(values[0][i].name,values[0][i].minborsa)
+           const situationDeposit = await  isAviableForDeposit(values[0][i].name,values[0][i].maxborsa)
           if(situationDeposit[0].deposit && situationWithdraw[0].withdraw){
             const minBorsaDepthData = await getDepth(values[0][i].name,values[0][i].minborsa)
             const maxBorsaDepthData  = await getDepth(values[0][i].name,values[0][i].maxborsa)
            if(maxBorsaDepthData[0].bestBuy>minBorsaDepthData[0].bestSell){
+            console.log(i)
             result.push({
                 name:values[0][i].name,
                 minPrice: values[0][i].min_price,
@@ -221,19 +225,18 @@ const dataEkle =async()=>{
                 maxborsa: values[0][i].maxborsa,
                 alis:minBorsaDepthData[0].bestSell,
                 alisToplami:(minBorsaDepthData[0].bestSell*minBorsaDepthData[0].bestSellAmount).toFixed(4),
-
                 satis:maxBorsaDepthData[0].bestBuy,
                 satisToplami:(maxBorsaDepthData[0].bestBuy*maxBorsaDepthData[0].bestBuyAmount).toFixed(4),
                 
             })
 
            }
-
-
-           
+          }
+          else{
+            
           }
         } catch (error) {
-            
+            console.log(error)
         }
           }
           const dateLast = Date.now()
@@ -433,9 +436,10 @@ const dataEkle =async()=>{
 }
 
 
-//dataEkle()
+
 const isAviableForDeposit =async(coin,borsa)=>{
-   
+    
+    return new Promise((resolve, reject) => {
     client.query(`select * from depositandwithdraw where borsa_name='${borsa}' and coin_name='${coin}'`,(err,res)=>{
         if(err){
             console.log(err)
@@ -443,21 +447,30 @@ const isAviableForDeposit =async(coin,borsa)=>{
     
         const result =[]
          const response = res.rows
+         try {
+            
+       
          result.push({
             deposit:response[0].deposit,
             withdraw:response[0].withdraw,
     
          })
-         return result
+        } catch (error) {
+            
+        }
+        
+        resolve(result)
     
         }
         client.end
     })
-    
+})
 
 }
 
 
+
+dataEkle()
 
 
 /*
