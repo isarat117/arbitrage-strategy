@@ -1,14 +1,10 @@
 const axios = require('axios')
 const postgres = require('./config/db')
-const express = require('express')
-const app = express();
 const client = postgres.client
-client.connect()
 
 
-const sorgu1 = "SELECT c.name, min(c.fiyat) as min_price, max(c.fiyat) as max_price, (max(c.fiyat) - min(c.fiyat))/min(c.fiyat) fiyat_farki, (CASE minb.borsa_id      WHEN 0 THEN 'kucoin'      WHEN 1 THEN 'bitmart'      WHEN 2 THEN 'mexc'      WHEN 3 THEN 'binance'      WHEN 4 THEN 'gate' END) as minborsa, (CASE maxb.borsa_id      WHEN 0 THEN 'kucoin'      WHEN 1 THEN 'bitmart'      WHEN 2 THEN 'mexc'      WHEN 3 THEN 'binance'      WHEN 4 THEN 'gate' END) as maxborsa FROM coin c LEFT JOIN ( SELECT name, fiyat, borsa_id FROM coin c1 WHERE fiyat = (SELECT MIN(fiyat) FROM coin WHERE name = c1.name) ) minb ON minb.name = c.name LEFT JOIN ( SELECT name, fiyat, borsa_id FROM coin c2 WHERE fiyat = (SELECT MAX(fiyat) FROM coin WHERE name = c2.name) ) maxb ON maxb.name = c.name GROUP BY c.name, minb.borsa_id, maxb.borsa_id HAVING max(c.fiyat) - min(c.fiyat) > (min(c.fiyat) * 0.03) AND max(c.fiyat) - min(c.fiyat) < (min(c.fiyat) * 0.1) AND min(c.fiyat) > 0"
 
-
+const sorgu1 = "SELECT name, MIN(fiyat) AS min_fiyat, MAX(fiyat) AS max_fiyat, ((MAX(fiyat) - MIN(fiyat)) / MIN(fiyat)) * 100 AS fiyat_farki, (SELECT ad FROM borsa WHERE id = (SELECT borsa_id FROM coin c WHERE name = c1.name AND fiyat = MIN(c1.fiyat) LIMIT 1)) AS min_borsa_ad, (SELECT ad FROM borsa WHERE id = (SELECT borsa_id FROM coin c WHERE name = c1.name AND fiyat = MAX(c1.fiyat) LIMIT 1)) AS max_borsa_ad FROM coin c1 GROUP BY name HAVING MIN(fiyat)>0 and ((MAX(fiyat) - MIN(fiyat)) / MIN(fiyat)) * 100 BETWEEN 5 AND 10 ORDER BY name asc;"
 
 
 
@@ -32,6 +28,9 @@ const getKucoinPrices =async ()=>
 
 const getBitmartPrices =async()=>{
     return new Promise( async(resolve, reject) => {
+        try {
+            
+       
     const response = await axios.get(`https://api-cloud.bitmart.com/spot/v1/ticker`)
     data =response.data.data.tickers
     //console.log(data)
@@ -44,14 +43,20 @@ const getBitmartPrices =async()=>{
             data[i].symbol.includes('4S_') || data[i].symbol.includes('4L_') ||
             data[i].symbol.includes('3S_') || data[i].symbol.includes('3L_') ||
             data[i].symbol.includes('2S_') || data[i].symbol.includes('2L_'))){
-            values.push({name:data[i].symbol.slice(0,-5) , value:data[i].close_24h})
+            values.push({name:data[i].symbol.slice(0,-5) , value:data[i].close_24h, bid:data[i].best_bid ,ask:data[i].best_ask})
 
         }
     }
+    
     resolve(values)
+} catch (error) {
+            
+}
 })
   
 }
+
+
 
 const getMexcPrices =async()=>{
     return new Promise( async(resolve, reject) => {
@@ -66,29 +71,17 @@ const getMexcPrices =async()=>{
             data[i].symbol.includes('3S_') || data[i].symbol.includes('3L_') ||
             data[i].symbol.includes('2S_') || data[i].symbol.includes('2L_'))
         ){
-            values.push({name:data[i].symbol.slice(0,-5) , value:data[i].last})
+            values.push({name:data[i].symbol.slice(0,-5) , value:data[i].last, bid:data[i].bid, ask:data[i].ask})
 
         }
 
     }
+    
     resolve(values)
 })
 
 }
 
-const getBinancePrices =async()=>{
-    return new Promise( async(resolve, reject) => {
-    const response = await axios.get(`https://api.binance.com/api/v3/ticker/24hr`)
-    data = response.data
-    const values =[]
-    for(var i=0 ; i<data.length;i++){
-        if(data[i].symbol.endsWith('USDT')){
-            values.push({name:data[i].symbol.slice(0,-4), value:data[i].lastPrice})
-        }
-    }
-    resolve(values)
-})
-}
 
 const getGatePrices =async()=>{
     return new Promise( async(resolve, reject) => {
@@ -102,171 +95,16 @@ const getGatePrices =async()=>{
             data[i].currency_pair.includes('4S_') || data[i].currency_pair.includes('4L_') ||
             data[i].currency_pair.includes('3S_') || data[i].currency_pair.includes('3L_') ||
             data[i].currency_pair.includes('2S_') || data[i].currency_pair.includes('2L_'))){
-            values.push({name:data[i].currency_pair.slice(0,-5), value:data[i].last})
+            values.push({name:data[i].currency_pair.slice(0,-5), value:data[i].last, bid:data[i].highest_bid, ask:data[i].lowest_ask})
         }
     }
+   
     resolve(values)
 })
 }
 
 
 
-
- const dataEkle =async()=>{
-    return new Promise(async(resolve, reject) => {
-    
-    const values=[]
-    const result =[]
-    const dateFirst = Date.now()
-
-    // tüm dataları silip tekrar yazmak için
-    client.query(`DELETE FROM public.coin WHERE true`,(err,res)=>{
-        if(err){
-            console.log(err)
-        }else{
-           // console.log("silindi")
-        }
-        client.end
-    })
-
-    //withdraw ve deposit için önceki insert işlemlerini siler
-    client.query(`DELETE FROM depositandwithdraw WHERE true`,(err,res)=>{
-        if(err){
-            console.log(err)
-        }else{
-           // console.log("silindi")
-        }
-        client.end
-    })
-    await setDepositAndWithdraw("kucoin")
-    await setDepositAndWithdraw("gate")
-    await setDepositAndWithdraw("bitmart")
-    await setDepositAndWithdraw("mexc")
-    
-
-
-   await Promise.all([
-        getKucoinPrices(),
-        getBitmartPrices(),
-        getMexcPrices(),
-        getBinancePrices(),
-        getGatePrices()
-    ])
-    .then(([kucoin, bitmart, mexc, binance, gate]) => {
-        for(var i=0; i<kucoin.length;i++){
-            client.query(`INSERT INTO coin(id, name, borsa_id, fiyat) VALUES (${i}, '${kucoin[i].name}', 0, '${kucoin[i].value}')`,(err,res)=>{
-                if(err){
-                    console.log(err)
-                }else{
-                  //  console.log("basarılı")
-                }
-                client.end
-            })
-        } 
-    
-    
-        
-        for(var i=0; i<bitmart.length;i++){
-            client.query(`INSERT INTO coin(id, name, borsa_id, fiyat) VALUES (${i+kucoin.length}, '${bitmart[i].name}', 1, '${bitmart[i].value}')`,(err,res)=>{
-                if(err){
-                    console.log(err)
-                }else{
-                  //  console.log("basarılı")
-                }
-                client.end
-            })
-        } 
-    
-    
-        
-        for(var i=0; i<mexc.length;i++){
-            client.query(`INSERT INTO coin(id, name, borsa_id, fiyat) VALUES (${i+kucoin.length+bitmart.length}, '${mexc[i].name}', 2, '${mexc[i].value}')`,(err,res)=>{
-                if(err){
-                    console.log(err)
-                }else{
-                  //  console.log("basarılı")
-                }
-                client.end
-            })
-        }
-        
-        
-        for(var i=0; i<binance.length;i++){
-            client.query(`INSERT INTO coin(id, name, borsa_id, fiyat) VALUES (${i+kucoin.length+bitmart.length+mexc.length}, '${binance[i].name}', 3, '${binance[i].value}')`,(err,res)=>{
-                if(err){
-                    console.log(err)
-                }else{
-                   // console.log("basarılı")
-                }
-                client.end
-            })
-        }
-        
-        for(var i=0; i<gate.length;i++){
-            client.query(`INSERT INTO coin(id, name, borsa_id, fiyat) VALUES (${i+kucoin.length+bitmart.length+mexc.length+binance.length}, '${gate[i].name}', 4, '${gate[i].value}')`,(err,res)=>{
-                if(err){
-                    console.log(err)
-                }else{
-                   // console.log("basarılı")
-                }
-                client.end
-            })
-        }
-    })
-    
-   
-
-    
-    client.query(sorgu1,async(err,res)=>{
-        if(err){
-            console.log(err)
-        }else{
-            values.push(res.rows)
-            for(var i =0; i<values[0].length;i++){
-                console.log(`${i}       qq    ${values[0][i].name}`)
-                try {
-                    // API çağrıları paralel olarak yapılıyor
-                    const [situationWithdraw,situationDeposit] = await Promise.all([
-                        isAviableForDeposit(values[0][i].name,values[0][i].minborsa),
-                        isAviableForDeposit(values[0][i].name,values[0][i].maxborsa)
-                    ])
-                    if(situationDeposit[0].deposit && situationWithdraw[0].withdraw){
-                        const [minBorsaDepthData,maxBorsaDepthData] = await Promise.all([
-                            getDepth(values[0][i].name,values[0][i].minborsa),
-                            getDepth(values[0][i].name,values[0][i].maxborsa)
-                        ])
-                        if(maxBorsaDepthData[0].bestBuy>minBorsaDepthData[0].bestSell){
-                            console.log(i)
-                            result.push({
-                                name:values[0][i].name,
-                                minPrice: values[0][i].min_price,
-                                maxPrice: values[0][i].max_price,
-                                fiyatFarki: values[0][i].fiyat_farki.toFixed(3),
-                                minborsa: values[0][i].minborsa,
-                                maxborsa: values[0][i].maxborsa,
-                                alis:minBorsaDepthData[0].bestSell,
-                              
-                                satis:maxBorsaDepthData[0].bestBuy,
-                                alisToplami:(minBorsaDepthData[0].bestSell*minBorsaDepthData[0].bestSellAmount).toFixed(4),
-                                satisToplami:(maxBorsaDepthData[0].bestBuy*maxBorsaDepthData[0].bestBuyAmount).toFixed(4),
-                            })
-                        }
-                    }
-                } catch (error) {
-                    console.log(error)
-                }
-            }
-            const dateLast = Date.now()
-            console.log((dateLast-dateFirst)/1000 , " saniye sürdü")
-        console.log(values[0].length)
-            console.table(result)
-            client.end()
-            return result;
-            
-        }
-    })
-})
-}
 // deposit ve withdraw için kontrol fonksiyonu
  const setDepositAndWithdraw =async(borsa)=>{
     
@@ -279,11 +117,11 @@ const getGatePrices =async()=>{
         for(var i= 0; i<data.length;i++){
             client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('kucoin', '${data[i].currency}', ${data[i].isDepositEnabled}, ${data[i].isWithdrawEnabled});`,(err,res)=>{
                 if(err){
-                    console.log(err)
+                   // console.log(err)
                 }else{
                    // console.log("basarılı")
                 }
-                client.end
+               
             })
            
         }
@@ -291,34 +129,37 @@ const getGatePrices =async()=>{
     //done
    
     if(borsa==="bitmart"){
+        try {
+            
+        
         const response  = await axios.get(`https://api-cloud.bitmart.com/account/v1/currencies`)
         data = response.data.data.currencies
         for(var i= 0; i<data.length;i++){
-            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('bitmart', '${data[i].currency}', ${data[i]. deposit_enabled}, ${data[i].withdraw_enabled});`,(err,res)=>{
+            client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('bitmart', '${data[i].currency}', ${data[i].deposit_enabled}, ${data[i].withdraw_enabled});`,(err,res)=>{
                 if(err){
-                    console.log(err)
+                    //console.log(err)
                 }else{
                    // console.log("basarılı")
                 }
-                client.end
+              
             })
            
         }
+    } catch (error) {
+            
+    }
     }
 
     if(borsa==="mexc"){
         const response  = await axios.get(`https://www.mexc.com/open/api/v2/market/coin/list?currency`)
         data0 = response.data.data
-       
 
         for(var i= 0; i<data0.length;i++){
             withdraw=false
             deposit=false
-            
-
-
             coinName = data0[i].currency
             data1 = response.data.data[i].coins
+
             for(var j =0; j<data1.length;j++){
                 if(data1[j].is_withdraw_enabled && !withdraw){
                     withdraw=true
@@ -332,11 +173,11 @@ const getGatePrices =async()=>{
            
             client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('mexc', '${coinName}', ${deposit}, ${withdraw});`,(err,res)=>{
                 if(err){
-                    console.log(err)
+                    //console.log(err)
                 }else{
                    // console.log("basarılı")
                 }
-                client.end
+                
             })
         }
 
@@ -349,118 +190,120 @@ const getGatePrices =async()=>{
         for(var i=0; i<data.length; i++){
             client.query(`INSERT INTO public.depositandwithdraw( borsa_name, coin_name, deposit, withdraw) VALUES ('gate', '${data[i].currency}', ${!data[i].deposit_disabled}, ${!data[i].withdraw_disabled});`,(err,res)=>{
                 if(err){
-                    console.log(err)
+                  //  console.log(err)
                 }else{
                    // console.log("basarılı")
                 }
-                client.end
+               
             })
 
         }
      
     }
+   
     
  }
+// trade sayfasına göndermek için link oluşturur
+ const setLink =(coin,borsa)=>{
+    if(borsa==="bitmart")
+    {
+        return `https://www.bitmart.com/trade/en-US?symbol=${coin}_USDT&layout=basic`
 
+    }
+    if(borsa==="kucoin")
+    {
+        return `https://www.kucoin.com/trade/${coin}-USDT`
+    }
+    if(borsa==="gate")
+    {
+        return `https://www.gate.io/trade/${coin}_USDT`
+        
+    }
+    if(borsa==="mexc")
+    {
+        return `https://www.mexc.com/exchange/${coin}_USDT?_from=search_spot_trade`
+    }
+    if(borsa==="binance")
+    {
+        return `https://www.binance.com/tr/trade/${coin}_USDT?theme=dark&type=spot`
+    }
+
+   
+
+ }
+
+
+ // ya silencek ya da tek seferde veriler alınacak
  const getDepth =async(coin,borsa)=>{
     const values =[]
    //done
    return new Promise( async(resolve, reject) => {
-    if(borsa==="kucoin"){
+    
+    if(borsa=="kucoin"){
         coin = coin+"-USDT"
          const response = await axios.get(`https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=${coin}`)
          try {
-            
-        
          values.push({
-
-            bestBuy: response.data.data.bestBid,
-            bestBuyAmount:response.data.data.bestBidSize,
-            
-            bestSell:response.data.data.bestAsk,
-            bestSellAmount:response.data.data.bestAskSize,
+            bid: response.data.data.bestBid,
+            ask:response.data.data.bestAsk,
          })
+         resolve(values)
         } catch (error) {
-            
+            resolve(0)
+            console.log(error)
         }
        
-        resolve(values)
+       
     }
-     ///done
-    if(borsa==="bitmart"){
-        coin = coin+"_USDT"
-        const response = await axios.get(`https://api-cloud.bitmart.com/spot/v1/ticker_detail?symbol=${coin}`)
-        
-        values.push({
+
+
+    if(borsa=="bitmart"){
+        client.query(`select bid,ask from coin where name='${coin}' and borsa_id =1`,(err,res)=>{
+            if(err){
+               console.log(err)
+            }else{
+              
+                resolve(res.rows)
+            }
            
-           bestBuy: response.data.data.best_bid,
-           bestBuyAmount: response.data.data.best_bid_size,
-
-           bestSell:response.data.data.best_ask,
-           bestSellAmount:response.data.data.best_ask_size,
-
         })
        
-        resolve(values)
    }
-   //done
-   if(borsa==="mexc"){
 
-    coin = coin+"_USDT"
-    const response = await axios.get(`https://www.mexc.com/open/api/v2/market/depth?symbol=${coin}&depth=2`);
-   // console.log(response.data.data)
-   
-    values.push({
-        bestBuy: response.data.data.bids[0].price,
-        bestBuyAmount: response.data.data.bids[0].quantity,
-
-        bestSell:response.data.data.asks[0].price,
-        bestSellAmount:response.data.data.asks[0].quantity,
  
-     })
-     
-     resolve(values)
-     }
-
-    
-    
-     //done
-    if(borsa==="binance"){
-        coin = coin+"USDT"
-        const response = await axios.get(`https://data.binance.com/api/v3/depth?symbol=${coin}&limit=1`)
-        
-        values.push({
-        bestBuy: response.data.bids[0][0],
-        bestBuyAmount: response.data.bids[0][1],
-
-        bestSell:response.data.asks[0][0],
-        bestSellAmount:response.data.asks[0][1],
-
-        })
+   if(borsa=="mexc"){
+    client.query(`select bid,ask from coin where name='${coin}' and borsa_id =2`,(err,res)=>{
+        if(err){
+           console.log(err)
+        }else{
+           
+           
+            resolve(res.rows)
+        }
       
-        resolve(values)
-    }
+    })
+   
+     }
+    
 
-    if(borsa==="gate"){
-        coin= coin+"_USDT"
-        const response = await axios.get(`https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${coin}&limit=1`)
-        
-        values.push({
-
-        bestBuy: response.data.bids[0][0],
-        bestBuyAmount: response.data.bids[0][1],
-
-        bestSell:response.data.asks[0][0],
-        bestSellAmount:response.data.asks[0][1]
-
+    if(borsa=="gate"){
+        client.query(`select bid,ask from coin where name='${coin}' and borsa_id =4`,(err,res)=>{
+            if(err){
+              console.log(err)
+            }else{
+                
+                
+                resolve(res.rows)
+            }
+          
         })
        
-        resolve(values)
     }
+   
+
 })
      
 }
-
 
 
 const isAviableForDeposit =async(coin,borsa)=>{
@@ -488,25 +331,184 @@ const isAviableForDeposit =async(coin,borsa)=>{
         resolve(result)
     
         }
-        client.end
+       
     })
 })
 
 }
 
 
-dataEkle()
-//dataEkle()
+const dataEkle =async(from,where)=>{
+    client.connect()
+    console.log('----------------------------------------------------------------------------');
+    //console.log('Yeni Coinler yükleniyor');
+    client.on('error', e => {
+        console.log(e);
+    });
+    return new Promise(async(resolve, reject) => {
+    
+    const values=[]
+    const result =[]
+    const dateFirst = Date.now() 
+
+    // tüm dataları silip tekrar yazmak için
+    client.query(`TRUNCATE TABLE coin RESTART IDENTITY;`,(err,res)=>{
+        if(err){
+            console.log(err)
+        }else{
+         console.log("Eski Coin Verileri silindi")
+        }
+      
+    })
+
+    //withdraw ve deposit için önceki insert işlemlerini siler
+    client.query(`TRUNCATE TABLE depositandwithdraw RESTART IDENTITY;`,(err,res)=>{
+        if(err){
+            console.log(err)
+        }else{
+            console.log("Eski Withdraw ve Deposit Verileri silindi")
+        }
+      
+    })
+ 
 
 
-/*
-kucoin:0
-bitmart:1
-mexc :2 
-binance:3
-gate:4
-*/
+    await Promise.all([
+     setDepositAndWithdraw("kucoin"),
+     setDepositAndWithdraw("gate"),
+     setDepositAndWithdraw("bitmart"),
+     setDepositAndWithdraw("mexc"),
+    ])
+    
 
 
+   await Promise.all([
+        getKucoinPrices(),
+        getBitmartPrices(),
+        getMexcPrices(),
+        getGatePrices()
+    ])
+    .then(([kucoin, bitmart, mexc, gate]) => {
 
+        // Veritabanı Auto increment olacak ve delete yerine trunscate kullanılacak 
+        console.log("Veriler çekildi Veritabanına kaydediliyor")
+        for(var i=0; i<kucoin.length;i++){
+            client.query(`INSERT INTO coin( name, borsa_id, fiyat) VALUES ( '${kucoin[i].name}', 0 , '${kucoin[i].value}')`,(err,res)=>{
+                if(err){
+                   console.log(err)
+                }else{
+                  //  console.log("basarılı")
+                }
+              
+            })
+        } 
+    
+    
+        
+        for(var i=0; i<bitmart.length;i++){
+            client.query(`INSERT INTO coin( name, borsa_id, fiyat, bid, ask) VALUES ('${bitmart[i].name}', 1,${bitmart[i].value},${bitmart[i].bid},${bitmart[i].ask})`,(err,res)=>{
+                if(err){
+                   //console.log(err)
+                }else{
+                  //  console.log("basarılı")
+                }
+               
+            })
+        } 
+    
+    
+        
+        for(var i=0; i<mexc.length;i++){
+            client.query(`INSERT INTO coin( name, borsa_id, fiyat, bid, ask) VALUES ('${mexc[i].name}', 2, ${mexc[i].value},${mexc[i].bid},${mexc[i].ask})`,(err,res)=>{
+                if(err){
+                 //  console.log(err)
+                }else{
+                  //  console.log("basarılı")
+                }
+              
+            })
+        }
+        
+      
+        
+        for(var i=0; i<gate.length;i++){
+            client.query(`INSERT INTO coin( name, borsa_id, fiyat, bid, ask) VALUES ('${gate[i].name}', 4, ${gate[i].value} , ${gate[i].bid} , ${gate[i].ask})`,(err,res)=>{
+                if(err){
+                   // console.log(err)
+                }else{
+                   //console.log("basarılı")
+                }
+                
+            })
+        }
+    })
+    
+   
+
+    
+    client.query(`SELECT name, MIN(fiyat) AS min_fiyat, MAX(fiyat) AS max_fiyat, ((MAX(fiyat) - MIN(fiyat)) / MIN(fiyat)) * 100 AS fiyat_farki, (SELECT ad FROM borsa WHERE id = (SELECT borsa_id FROM coin c WHERE name = c1.name AND fiyat = MIN(c1.fiyat) LIMIT 1)) AS min_borsa_ad, (SELECT ad FROM borsa WHERE id = (SELECT borsa_id FROM coin c WHERE name = c1.name AND fiyat = MAX(c1.fiyat) LIMIT 1)) AS max_borsa_ad FROM coin c1 GROUP BY name HAVING MIN(fiyat)>0 and ((MAX(fiyat) - MIN(fiyat)) / MIN(fiyat)) * 100 BETWEEN ${from} AND ${where} ORDER BY name asc;`,async(err,res)=>{
+        if(err){
+            //console.log(err)
+        }else{
+            values.push(res.rows)
+            //console.log(values)
+            console.log(`Sorgu Başladı ${values[0].length} adet coin sistemde`)
+           
+        
+            for(var i =0; i<values[0].length;i++){
+               
+                try {
+                    // API çağrıları paralel olarak yapılıyor
+                    const [situationWithdraw,situationDeposit] = await Promise.all([
+                        isAviableForDeposit(values[0][i].name,values[0][i].min_borsa_ad),
+                        isAviableForDeposit(values[0][i].name,values[0][i].max_borsa_ad)
+                    ])
+                    if(situationDeposit[0].deposit && situationWithdraw[0].withdraw){
+                      
+                        const [minBorsaDepthData,maxBorsaDepthData] = await Promise.all([
+                            getDepth(values[0][i].name,values[0][i].min_borsa_ad),
+                            getDepth(values[0][i].name,values[0][i].max_borsa_ad)
+                        ])
+                        
+                        if(maxBorsaDepthData[0].bid>minBorsaDepthData[0].ask){
+                        
+                        
+                                
+                           
+                            result.push({
+                                name:values[0][i].name,
+                                minPrice: values[0][i].min_fiyat,
+                                maxPrice: values[0][i].max_fiyat,
+                                fiyatFarki: values[0][i].fiyat_farki.toFixed(3),
+                                minborsa: values[0][i].min_borsa_ad,
+                                maxborsa: values[0][i].max_borsa_ad,
+                                alis:minBorsaDepthData[0].ask,
+                                satis:maxBorsaDepthData[0].bid,
+                                linkMinBorsa: setLink(values[0][i].name,values[0][i].min_borsa_ad),
+                                linkMaxBorsa: setLink(values[0][i].name,values[0][i].max_borsa_ad),
+
+                            })
+                           
+                        }
+                       
+                        
+                    }
+                } catch (error) {
+                   console.log(error)
+                }
+            }
+           
+            const dateLast = Date.now()
+            console.log((dateLast-dateFirst)/1000 , " saniye sürdü")
+            console.log(`${result.length} adet veri başarı ile yüklendi`)
+            resolve(result);
+            
+            
+            
+        }
+          })
+    
+})
+}
 module.exports={dataEkle:dataEkle}
+
