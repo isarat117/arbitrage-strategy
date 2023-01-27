@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbitrage Strategy</title>
+</head>
+<body>
+
+    <div class="table">
+        <div class="table-row header">
+            <div class="table-cell"></div>
+            <div class="table-cell">Name</div>
+            <div class="table-cell">Min Price</div>
+            <div class="table-cell">Max Price</div>
+            <div class="table-cell">Price Difference</div>
+            <div class="table-cell">Min Exchange</div>
+            <div class="table-cell">Max Exchange</div>
+            <div class="table-cell">Buy Price</div>
+            <div class="table-cell">Sell Price</div>
+           
+        </div>
+        <% data.forEach((data) => { %>
+            <div class="table-row">
+                <div class="table-cell">></div>
+                <div class="table-cell"> <a href="http://localhost:3000/tahta/<%=data.name%>" target="_blank"><%=data.name%></a></div>
+                <div class="table-cell"><%=data.minPrice%></div>
+                <div class="table-cell"><%=data.maxPrice%></div>
+                <div class="table-cell"><%=data.fiyatFarki%></div>
+                <div class="table-cell"><a href="<%=data.linkMinBorsa%>" target="_blank"><%=data.minborsa%></a></div>
+                <div class="table-cell"><a href="<%=data.linkMaxBorsa%>" target="_blank"><%=data.maxborsa%></a></div>  
+                <div class="table-cell"><%=data.alis%></div>
+                <div class="table-cell"><%=data.satis%></div>
+                
+            </div>
+            
+
+            <%}) %>
+    </div>
+
+    <script>
+
+        
+        
+        </script>
+   <style>
+a {
+ 
+  color: rgb(187, 56, 76);
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.table {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.table-row {
+    display: table-row;
+}
+
+.table-cell {
+    display: table-cell;
+    padding: 0.5em;
+    border: 1px solid #ccc;
+}
+
+.header {
+    font-weight: bold;
+}
+.table-cell:first-child {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+}
+
+.table-cell:last-child {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+.table-row:nth-child(even) {
+    background-color: #f2f2f2;
+}
+ </style>
+
+
+
+
+</body>
+</html>

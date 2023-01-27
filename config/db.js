@@ -1,7 +1,7 @@
 const pg = require('pg')
 
 
-const client = new pg.Client({
+const client = new pg.Pool({
     host:"localhost",
     user:"postgres",
     port:5432,

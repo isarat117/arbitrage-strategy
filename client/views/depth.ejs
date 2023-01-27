@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+<% tahta.forEach(data => { %>
+    <div class="stock-table">
+        <table class="satis">
+          <tr>
+            <br>
+          </tr>
+          <%=data.borsa.toUpperCase()%> 
+          <br>
+          <br>
+          <br>
+          SATIŞ
+          <tr>
+            <th>Fiyat</th>
+            <th>Adet</th>
+          </tr>
+          
+          <% data.asks.reverse().forEach(asks => { %>
+            <tr>
+                <td><%=asks[0]%> </td>
+                <td><%=asks[0]*asks[1]%></td>
+              </tr>
+          <% }) %>
+        </table>
+        <table class="alis">
+         
+          ALIŞ
+        <tr>
+          <th>Fiyat</th>
+          <th>Adet</th>
+        </tr>
+        
+        <% data.bids.forEach(bids => { %>
+          <tr>
+              <td><%=bids[0]%> </td>
+              <td><%=bids[0]*bids[1]%></td>
+            </tr>
+        <% }) %>
+       
+      </table>
+      </div>
+     
+<% }) %>
+
+
+
+
+      <style>
+        .stock-table {
+  width:15%;
+  float: left;
+  margin-right: 10%;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #dddddd;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background-color: #dddddd;
+}
+.alis {
+  background-color: rgb(122, 174, 122);
+}
+
+.satis {
+  background-color: rgb(241, 54, 54);
+}
+
+      </style>
+
+
+<script>
+const getAverage =(data)=>{
+
+let amount = 0
+let balance=0
+
+ for(var i=0; i<data.length;i++){
+
+     amount += data[i][1]/data[i][0];
+     balance += data[i][1]
+
+ }
+
+ return balance/amount;
+}
+</script>
+</body>
+</html>
